@@ -6,6 +6,19 @@ works on Windows 10/11 under DWM (Desktop Window Manager) composition.
 These demos focus on the **window setup** side of transparency. 
 With a properly configured window, APIs like [DirectComposition](https://learn.microsoft.com/en-us/windows/win32/directcomp/directcomposition-portal) or supported rendering APIs like Vulkan can present translucent content into it, with per-pixel alpha blending against underlying windows or the desktop.
 
+<details>
+<summary>Keywords</summary>
+
+Windows transparent window, Win32 per-pixel alpha, DWM blur behind,
+`DwmEnableBlurBehindWindow`, `WS_EX_LAYERED`, `WS_EX_NOREDIRECTIONBITMAP`,
+layered window, alpha compositing, Vulkan transparent swapchain,
+`VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR`, pre-multiplied alpha,
+GLFW `GLFW_TRANSPARENT_FRAMEBUFFER` bug, DirectComposition alternative,
+translucent window C++, redirection surface, DWM composition,
+Windows 10, Windows 11, Mica, Acrylic, `DWMWA_SYSTEMBACKDROP_TYPE`.
+
+</details>
+
 ## Background
 
 On modern Windows, every window has a **DWM redirection surface** — a backing

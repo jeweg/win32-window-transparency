@@ -1,0 +1,25 @@
+cff-version: 1.2.0
+title: "Windows Desktop Transparency — Reference Demos"
+message: "If you use this reference code, please cite it as below."
+type: software
+authors:
+  - family-names: Weggemann
+    given-names: Jens
+repository-code: "https://github.com/jeweg/win32-window-transparency"
+abstract: >-
+  Minimal, self-contained Win32/C++ demos that show how per-pixel window
+  transparency works on Windows 10/11 under DWM composition: BLACK_BRUSH +
+  DwmEnableBlurBehindWindow, layered windows, WS_EX_NOREDIRECTIONBITMAP, and
+  Vulkan swapchains using VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR.
+keywords:
+  - win32
+  - windows
+  - dwm
+  - transparency
+  - per-pixel-alpha
+  - layered-window
+  - vulkan
+  - directcomposition
+  - cpp
+  - reference
+license: MIT
