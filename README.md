@@ -6,6 +6,8 @@ works on Windows 10/11 under DWM (Desktop Window Manager) composition.
 These demos focus on the **window setup** side of transparency. 
 With a properly configured window, APIs like [DirectComposition](https://learn.microsoft.com/en-us/windows/win32/directcomp/directcomposition-portal) or supported rendering APIs like Vulkan can present translucent content into it, with per-pixel alpha blending against underlying windows or the desktop.
 
+![Per-pixel alpha demo](screenshot.png)
+
 <details>
 <summary>Keywords</summary>
 
