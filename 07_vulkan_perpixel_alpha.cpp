@@ -1,9 +1,14 @@
 // Translucent Vulkan window.
 //
 // Window setup from test5.cpp (BLACK_BRUSH + DwmEnableBlurBehindWindow),
-// plus a minimal Vulkan swapchain that clears to 50% transparency
+// plus a minimal Vulkan swapchain that uploads a procedural per-pixel image
+// (radial alpha falloff: opaque red at center, transparent at the corners)
 // using VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR if supported by the driver.
 // On NVIDIA, this requires a recent driver (595+).
+//
+// The per-pixel content is generated once on the CPU into a host-visible
+// staging buffer and copied to the swapchain image each frame with
+// vkCmdCopyBufferToImage. No shaders, render passes, or pipelines required.
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -15,6 +20,8 @@
 #include <vector>
 #include <string>
 #include <cstdlib>
+#include <cmath>
+#include <cstdint>
 
 static void Fatal(const char* msg) {
     MessageBoxA(nullptr, msg, "Vulkan Transparency Test", MB_OK | MB_ICONERROR);
@@ -61,7 +68,15 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
     wc.hbrBackground  = (HBRUSH)GetStockObject(BLACK_BRUSH);
     RegisterClass(&wc);
 
-    DWORD dwStyle   = WS_OVERLAPPEDWINDOW;
+    // Resizing is intentionally disabled (no WS_THICKFRAME, no WS_MAXIMIZEBOX).
+    // This example focuses on Win32 + DWM per-pixel alpha compositing with Vulkan;
+    // handling WM_SIZE properly would require swapchain recreation logic
+    // (vkDeviceWaitIdle, destroy old swapchain, re-query surface caps, rebuild
+    // images/views, handle VK_ERROR_OUT_OF_DATE_KHR / VK_SUBOPTIMAL_KHR from
+    // vkAcquireNextImageKHR and vkQueuePresentKHR, and skip rendering when the
+    // client area is 0x0). That's ~60+ lines of Vulkan boilerplate that would
+    // distract from the transparency setup this example is meant to demonstrate.
+    DWORD dwStyle   = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX;
     DWORD dwExStyle = 0;
 
     RECT rect = {0, 0, 800, 600};
@@ -174,6 +189,18 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
     vkGetDeviceQueue(device, queueFamily, 0, &queue);
 
     // ---- Swapchain ----
+    //
+    // NOTE: This swapchain is created once and never recreated. The window
+    // style above disables resizing so currentExtent stays valid for the
+    // lifetime of the program. If you copy this code into an app that allows
+    // resizing, you MUST:
+    //   - Handle VK_ERROR_OUT_OF_DATE_KHR / VK_SUBOPTIMAL_KHR from
+    //     vkAcquireNextImageKHR and vkQueuePresentKHR (don't VK_CHECK them).
+    //   - On those results (or on WM_SIZE), vkDeviceWaitIdle, destroy the old
+    //     swapchain + image views, re-query surface caps, and create a new one.
+    //   - Skip rendering when currentExtent is 0x0 (minimized window).
+    // None of that is done here on purpose -- it would dwarf the Win32/DWM
+    // transparency code this file is meant to illustrate.
 
     VkSurfaceCapabilitiesKHR surfaceCaps;
     VK_CHECK(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice, surface, &surfaceCaps));
@@ -187,7 +214,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
     swapchainCI.minImageCount    = surfaceCaps.minImageCount < 2 ? 2 : surfaceCaps.minImageCount;
     swapchainCI.imageFormat      = VK_FORMAT_B8G8R8A8_UNORM;
     swapchainCI.imageColorSpace  = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
-    swapchainCI.imageExtent      = surfaceCaps.currentExtent;
+    VkExtent2D extent = surfaceCaps.currentExtent;
+    swapchainCI.imageExtent      = extent;
     swapchainCI.imageArrayLayers = 1;
     swapchainCI.imageUsage       = VK_IMAGE_USAGE_TRANSFER_DST_BIT;
     swapchainCI.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
@@ -203,6 +231,88 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
     VK_CHECK(vkGetSwapchainImagesKHR(device, swapchain, &imageCount, nullptr));
     std::vector<VkImage> swapchainImages(imageCount);
     VK_CHECK(vkGetSwapchainImagesKHR(device, swapchain, &imageCount, swapchainImages.data()));
+
+    // ---- Staging buffer with procedural per-pixel content ----
+    //
+    // BGRA8, pre-multiplied alpha (matches VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR).
+    // Filled once on the CPU; copied to the swapchain image each frame.
+
+    const VkDeviceSize bufferSize =
+        VkDeviceSize(extent.width) * VkDeviceSize(extent.height) * 4;
+
+    VkBufferCreateInfo bufferCI = { VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
+    bufferCI.size        = bufferSize;
+    bufferCI.usage       = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+    bufferCI.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+    VkBuffer stagingBuffer;
+    VK_CHECK(vkCreateBuffer(device, &bufferCI, nullptr, &stagingBuffer));
+
+    VkMemoryRequirements memReqs;
+    vkGetBufferMemoryRequirements(device, stagingBuffer, &memReqs);
+
+    VkPhysicalDeviceMemoryProperties memProps;
+    vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memProps);
+
+    const VkMemoryPropertyFlags wantedProps =
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+
+    uint32_t memoryTypeIndex = UINT32_MAX;
+    for (uint32_t i = 0; i < memProps.memoryTypeCount; i++) {
+        const bool typeAllowed = (memReqs.memoryTypeBits & (1u << i)) != 0;
+        const bool propsMatch  =
+            (memProps.memoryTypes[i].propertyFlags & wantedProps) == wantedProps;
+        if (typeAllowed && propsMatch) {
+            memoryTypeIndex = i;
+            break;
+        }
+    }
+    if (memoryTypeIndex == UINT32_MAX)
+        Fatal("No host-visible/coherent memory type found for staging buffer.");
+
+    VkMemoryAllocateInfo memAlloc = { VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO };
+    memAlloc.allocationSize  = memReqs.size;
+    memAlloc.memoryTypeIndex = memoryTypeIndex;
+
+    VkDeviceMemory stagingMemory;
+    VK_CHECK(vkAllocateMemory(device, &memAlloc, nullptr, &stagingMemory));
+    VK_CHECK(vkBindBufferMemory(device, stagingBuffer, stagingMemory, 0));
+
+    // Fill the buffer once: radial alpha falloff, opaque red at center,
+    // transparent at the corners. Stored pre-multiplied (R = R*A).
+    {
+        void* mapped = nullptr;
+        VK_CHECK(vkMapMemory(device, stagingMemory, 0, bufferSize, 0, &mapped));
+        uint8_t* pixels = static_cast<uint8_t*>(mapped);
+
+        const float cx = extent.width  * 0.5f;
+        const float cy = extent.height * 0.5f;
+        const float maxR = std::sqrt(cx * cx + cy * cy);
+
+        for (uint32_t y = 0; y < extent.height; y++) {
+            for (uint32_t x = 0; x < extent.width; x++) {
+                const float dx = float(x) - cx;
+                const float dy = float(y) - cy;
+                const float r  = std::sqrt(dx * dx + dy * dy) / maxR; // 0..1
+                float a = 1.0f - r;
+                if (a < 0.0f) a = 0.0f;
+
+                // Pre-multiplied red.
+                const uint8_t A = uint8_t(a * 255.0f + 0.5f);
+                const uint8_t R = A;
+                const uint8_t G = 0;
+                const uint8_t B = 0;
+
+                // VK_FORMAT_B8G8R8A8_UNORM byte order: B, G, R, A.
+                uint8_t* p = pixels + (y * extent.width + x) * 4;
+                p[0] = B;
+                p[1] = G;
+                p[2] = R;
+                p[3] = A;
+            }
+        }
+        vkUnmapMemory(device, stagingMemory);
+    }
 
     // ---- Command pool & buffer ----
 
@@ -269,18 +379,20 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
                 0, 0, nullptr, 0, nullptr, 1, &barrier);
         }
 
-        // Clear to 50% transparent red (pre-multiplied)
+        // Copy the procedural per-pixel image from the staging buffer.
         {
-            VkClearColorValue clearColor = {{ 1.0f, 0.0f, 0.0f, 1.0f }};
-            // Pre-multiply with alpha to get 50% transparency
-            constexpr float alpha = 0.5f;
-            for (int i = 0; i < 4; i++) {   
-                clearColor.float32[i] *= alpha;
-            }
-            VkImageSubresourceRange range = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
-            vkCmdClearColorImage(cmd, swapchainImages[imageIndex],
-                                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                                &clearColor, 1, &range);
+            VkBufferImageCopy region = {};
+            region.bufferOffset      = 0;
+            region.bufferRowLength   = 0; // tightly packed
+            region.bufferImageHeight = 0;
+            region.imageSubresource  = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 };
+            region.imageOffset       = { 0, 0, 0 };
+            region.imageExtent       = { extent.width, extent.height, 1 };
+
+            vkCmdCopyBufferToImage(cmd, stagingBuffer,
+                                   swapchainImages[imageIndex],
+                                   VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                   1, &region);
         }
 
         // Transition to PRESENT_SRC
@@ -327,6 +439,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
 
     vkDestroyFence(device, fence, nullptr);
     vkDestroyCommandPool(device, commandPool, nullptr);
+    vkDestroyBuffer(device, stagingBuffer, nullptr);
+    vkFreeMemory(device, stagingMemory, nullptr);
     vkDestroySwapchainKHR(device, swapchain, nullptr);
     vkDestroyDevice(device, nullptr);
     vkDestroySurfaceKHR(instance, surface, nullptr);
