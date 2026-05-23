@@ -1,0 +1,39 @@
+# Common CMake build directory names
+build/
+__build/
+build-*/
+out/
+cmake-build-*/
+
+# CMake artifacts if anyone ever configures in-tree
+CMakeCache.txt
+CMakeFiles/
+CMakeScripts/
+cmake_install.cmake
+install_manifest.txt
+CTestTestfile.cmake
+Testing/
+compile_commands.json
+
+# Visual Studio / MSBuild local state
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.opensdf
+*.sdf
+*.VC.db
+*.VC.opendb
+
+# IDEs / editors
+.idea/
+.vscode/
+*.swp
+*~
+
+# OS junk
+Thumbs.db
+ehthumbs.db
+desktop.ini
+.DS_Store
