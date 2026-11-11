@@ -1,0 +1,3 @@
+WS_OVERLAPPEDWINDOW, NULL class brush, WS_EX_LAYERED off
+Surface in the middle of the client area: FFFFFFFF (ARGB)
+Swapped the checkerboard's colors. Press Escape in the window to exit.

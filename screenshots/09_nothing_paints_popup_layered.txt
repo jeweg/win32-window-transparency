@@ -1,0 +1,3 @@
+WS_POPUP, NULL class brush, WS_EX_LAYERED on
+Surface in the middle of the client area: FF555555 (ARGB)
+Swapped the checkerboard's colors. Press Escape in the window to exit.

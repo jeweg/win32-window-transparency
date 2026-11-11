@@ -1,10 +1,10 @@
 // Translucent Vulkan window.
 //
-// Window setup from test5.cpp (BLACK_BRUSH + DwmEnableBlurBehindWindow),
+// Window setup from 05_perpixel_alpha.cpp (BLACK_BRUSH + DwmEnableBlurBehindWindow),
 // plus a minimal Vulkan swapchain that uploads a procedural per-pixel image
 // (radial alpha falloff: opaque red at center, transparent at the corners)
-// using VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR if supported by the driver.
-// On NVIDIA, this requires a recent driver (595+).
+// using VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR, on the first GPU that offers
+// it for this window. On NVIDIA, this needs a recent driver.
 //
 // The per-pixel content is generated once on the CPU into a host-visible
 // staging buffer and copied to the swapchain image each frame with
@@ -14,6 +14,8 @@
 #include <windows.h>
 #include <dwmapi.h>
 #pragma comment(lib, "dwmapi.lib")
+
+#include "checkerboard.h"
 
 #include <vulkan/vulkan.h>
 
@@ -101,6 +103,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
         DeleteObject(region);
     }
 
+    ShowCheckerboardBehind(hwnd);
     ShowWindow(hwnd, nCmdShow);
     UpdateWindow(hwnd);
 
@@ -124,34 +127,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
     VkInstance instance;
     VK_CHECK(vkCreateInstance(&instanceCI, nullptr, &instance));
 
-    // ---- Physical device ----
-
-    uint32_t gpuCount = 0;
-    VK_CHECK(vkEnumeratePhysicalDevices(instance, &gpuCount, nullptr));
-    if (gpuCount == 0)
-        Fatal("No Vulkan physical devices found.");
-    std::vector<VkPhysicalDevice> physicalDevices(gpuCount);
-    VK_CHECK(vkEnumeratePhysicalDevices(instance, &gpuCount, physicalDevices.data()));
-    VkPhysicalDevice physicalDevice = physicalDevices[0];
-
-    // ---- Find a graphics queue family ----
-
-    uint32_t queueFamilyCount = 0;
-    vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, nullptr);
-
-    std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
-    vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &queueFamilyCount, queueFamilies.data());
-
-    uint32_t queueFamily = UINT32_MAX;
-    for (uint32_t i = 0; i < queueFamilyCount; i++) {
-        if (queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
-            queueFamily = i;
-            break;
-        }
-    }
-    if (queueFamily == UINT32_MAX)
-        Fatal("No graphics queue family found.");
-
     // ---- Surface ----
 
     VkWin32SurfaceCreateInfoKHR surfaceCI = { VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR };
@@ -161,10 +136,58 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
     VkSurfaceKHR surface;
     VK_CHECK(vkCreateWin32SurfaceKHR(instance, &surfaceCI, nullptr, &surface));
 
-    VkBool32 presentSupported = VK_FALSE;
-    VK_CHECK(vkGetPhysicalDeviceSurfaceSupportKHR(physicalDevice, queueFamily, surface, &presentSupported));
-    if (!presentSupported)
-        Fatal("Selected queue family does not support presentation.");
+    // ---- Physical device and queue family ----
+    //
+    // The first GPU with a queue family that can draw and present to this
+    // window, and with premultiplied composite alpha for it. With two GPUs,
+    // the first one enumerated may not have it.
+
+    uint32_t gpuCount = 0;
+    VK_CHECK(vkEnumeratePhysicalDevices(instance, &gpuCount, nullptr));
+    if (gpuCount == 0)
+        Fatal("No Vulkan physical devices found.");
+    std::vector<VkPhysicalDevice> physicalDevices(gpuCount);
+    VK_CHECK(vkEnumeratePhysicalDevices(instance, &gpuCount, physicalDevices.data()));
+
+    VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
+    uint32_t queueFamily = UINT32_MAX;
+    VkSurfaceCapabilitiesKHR surfaceCaps = {};
+    std::string rejected;
+    for (VkPhysicalDevice gpu : physicalDevices) {
+        VkPhysicalDeviceProperties props;
+        vkGetPhysicalDeviceProperties(gpu, &props);
+
+        uint32_t familyCount = 0;
+        vkGetPhysicalDeviceQueueFamilyProperties(gpu, &familyCount, nullptr);
+        std::vector<VkQueueFamilyProperties> families(familyCount);
+        vkGetPhysicalDeviceQueueFamilyProperties(gpu, &familyCount, families.data());
+
+        uint32_t family = UINT32_MAX;
+        for (uint32_t i = 0; i < familyCount && family == UINT32_MAX; i++) {
+            VkBool32 canPresent = VK_FALSE;
+            VK_CHECK(vkGetPhysicalDeviceSurfaceSupportKHR(gpu, i, surface, &canPresent));
+            if ((families[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) && canPresent)
+                family = i;
+        }
+        if (family == UINT32_MAX) {
+            rejected += std::string("\n") + props.deviceName + ": can't present to this window";
+            continue;
+        }
+
+        VkSurfaceCapabilitiesKHR caps;
+        VK_CHECK(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(gpu, surface, &caps));
+        if (!(caps.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR)) {
+            rejected += std::string("\n") + props.deviceName + ": no VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR";
+            continue;
+        }
+
+        physicalDevice = gpu;
+        queueFamily    = family;
+        surfaceCaps    = caps;
+        break;
+    }
+    if (physicalDevice == VK_NULL_HANDLE)
+        Fatal(("No GPU offers premultiplied composite alpha for this window:" + rejected).c_str());
 
     // ---- Device ----
 
@@ -202,16 +225,29 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
     // None of that is done here on purpose -- it would dwarf the Win32/DWM
     // transparency code this file is meant to illustrate.
 
-    VkSurfaceCapabilitiesKHR surfaceCaps;
-    VK_CHECK(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice, surface, &surfaceCaps));
+    // The pixel data below is BGRA and written for TRANSFER_DST, so make sure
+    // the surface takes both instead of picking something else.
+    uint32_t formatCount = 0;
+    VK_CHECK(vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, surface, &formatCount, nullptr));
+    std::vector<VkSurfaceFormatKHR> formats(formatCount);
+    VK_CHECK(vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, surface, &formatCount, formats.data()));
+    bool bgraOffered = false;
+    for (const VkSurfaceFormatKHR& f : formats) {
+        if (f.format == VK_FORMAT_B8G8R8A8_UNORM && f.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
+            bgraOffered = true;
+    }
+    if (!bgraOffered)
+        Fatal("The surface doesn't offer VK_FORMAT_B8G8R8A8_UNORM with VK_COLOR_SPACE_SRGB_NONLINEAR_KHR.");
+    if (!(surfaceCaps.supportedUsageFlags & VK_IMAGE_USAGE_TRANSFER_DST_BIT))
+        Fatal("The surface doesn't support VK_IMAGE_USAGE_TRANSFER_DST_BIT.");
 
-    if (!(surfaceCaps.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR))
-        Fatal("VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR not supported by this driver.\n"
-              "Make sure your driver version supports pre-multiplied alpha compositing.");
+    uint32_t minImageCount = surfaceCaps.minImageCount < 2 ? 2 : surfaceCaps.minImageCount;
+    if (surfaceCaps.maxImageCount != 0 && minImageCount > surfaceCaps.maxImageCount)
+        minImageCount = surfaceCaps.maxImageCount;
 
     VkSwapchainCreateInfoKHR swapchainCI = { VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR };
     swapchainCI.surface          = surface;
-    swapchainCI.minImageCount    = surfaceCaps.minImageCount < 2 ? 2 : surfaceCaps.minImageCount;
+    swapchainCI.minImageCount    = minImageCount;
     swapchainCI.imageFormat      = VK_FORMAT_B8G8R8A8_UNORM;
     swapchainCI.imageColorSpace  = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
     VkExtent2D extent = surfaceCaps.currentExtent;

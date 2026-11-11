@@ -1,0 +1,14 @@
+blur-behind on, WS_EX_LAYERED off
+
+                                     before    after     behind       on screen
+nothing                              FFFFFFFF  FFFFFFFF   85, 85, 85  255,255,255  
+FillRect, stock BLACK_BRUSH          FFFFFFFF  00000000   85, 85, 85   85, 85, 85  
+FillRect, RGB(0, 0, 0) brush         FFFFFFFF  00000000   85, 85, 85   85, 85, 85  
+PatBlt(BLACKNESS)                    FFFFFFFF  00000000   85, 85, 85   85, 85, 85  
+BLACK_BRUSH class brush erase        FFFFFFFF  00000000   85, 85, 85   85, 85, 85  
+FillRect, RGB(128, 128, 128) brush   FFFFFFFF  00808080   85, 85, 85  213,213,213  
+FillRect, COLOR_WINDOW + 1           FFFFFFFF  00FFFFFF   85, 85, 85  255,255,255  
+BitBlt, 32bpp DIB 0x80800000         FFFFFFFF  80800000   85, 85, 85  170, 42, 42  
+FillRect, 32bpp DIB pattern brush    FFFFFFFF  80800000   85, 85, 85  170, 42, 42  
+
+Surface bytes are ARGB. Press Escape in the window to exit.

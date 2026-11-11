@@ -1,5 +1,8 @@
 /*
-Win11-specific API to affect the non-client style.
+A Windows 11 system backdrop (Mica) and dark mode. Neither makes the client
+area transparent, it stays as opaque as in 01.
+
+Needs Windows SDK 10.0.22621 or newer for DWMWA_SYSTEMBACKDROP_TYPE.
 */
 
 #define WIN32_LEAN_AND_MEAN
@@ -7,6 +10,8 @@ Win11-specific API to affect the non-client style.
 
 #include <dwmapi.h>
 #pragma comment(lib, "dwmapi.lib")
+
+#include "checkerboard.h"
 
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
@@ -55,22 +60,21 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
         return 1;
     }
 
-    // Optional (helps on Win11): immersive dark mode attribute.
-    // 20 = DWMWA_USE_IMMERSIVE_DARK_MODE (older), 19 on some builds.
-    // Not required for backdrop; safe to ignore if it fails.
-    constexpr DWORD DWMWA_USE_IMMERSIVE_DARK_MODE_20 = 20;
+    // Dark mode for the frame. DWMWA_USE_IMMERSIVE_DARK_MODE is 20, Windows 10
+    // builds before 20H1 used 19. Not required for the backdrop.
     constexpr BOOL darkmodeSet = TRUE;
-    DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE_20, &darkmodeSet, sizeof(darkmodeSet));
+    DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &darkmodeSet, sizeof(darkmodeSet));
 
     // Values:
-    // DWMSBT_AUTO              (Auto heuristic)
-    // DWMSBT_NONE              (Disable)
-    // DWMSBT_MAINWINDOW        (System theme Mica)
-    // DWMSBT_TRANSIENTWINDOW   (Acrylic-like)
-    // DWMSBT_TABBEDWINDOW      (System theme Mica Alt)
-    constexpr DWM_SYSTEMBACKDROP_TYPE backdropType = DWMSBT_AUTO;
+    // DWMSBT_AUTO              (DWM decides, the default)
+    // DWMSBT_NONE              (no backdrop)
+    // DWMSBT_MAINWINDOW        (Mica)
+    // DWMSBT_TRANSIENTWINDOW   (Acrylic)
+    // DWMSBT_TABBEDWINDOW      (Mica Alt)
+    constexpr DWM_SYSTEMBACKDROP_TYPE backdropType = DWMSBT_MAINWINDOW;
     DwmSetWindowAttribute(hwnd, DWMWA_SYSTEMBACKDROP_TYPE, &backdropType, sizeof(backdropType));
 
+    ShowCheckerboardBehind(hwnd);
     ShowWindow(hwnd, nCmdShow);
 
     MSG msg;

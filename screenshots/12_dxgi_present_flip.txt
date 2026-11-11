@@ -1,0 +1,2 @@
+CreateSwapChainForHwnd (flip), premultiplied: 0x887A0001
+CreateSwapChainForHwnd (flip), unspecified: 0x00000000

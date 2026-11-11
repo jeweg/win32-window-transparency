@@ -5,6 +5,8 @@ Non-client areas (title bar, borders) hidden through window style.
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
+#include "checkerboard.h"
+
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
         case WM_DESTROY:
@@ -46,6 +48,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
         return 1;
     }
     
+    ShowCheckerboardBehind(hwnd);
     ShowWindow(hwnd, nCmdShow);
 
     MSG msg;

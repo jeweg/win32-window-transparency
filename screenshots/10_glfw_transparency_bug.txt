@@ -1,0 +1,2 @@
+Surface in the middle of the client area: FFFFFFFF (ARGB)
+Press Escape in the window to exit.

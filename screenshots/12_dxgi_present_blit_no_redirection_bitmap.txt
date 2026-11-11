@@ -1,0 +1,2 @@
+CreateSwapChainForHwnd (bitblt), premultiplied: 0x887A0001
+CreateSwapChainForHwnd (bitblt), unspecified: 0x00000000

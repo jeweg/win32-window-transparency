@@ -8,12 +8,15 @@ Translucent client area. Note the critically important black background brush.
 #include <dwmapi.h>
 #pragma comment(lib, "dwmapi.lib")
 
+#include "checkerboard.h"
+
 BOOL SetDwmAlphaCompositing(HWND hWnd, BOOL enable)
 {
     if (enable) {
-        // Note that specifying an empty region is not the same as
-        // a null region: the latter will apply blur or shadowing (OS-dependent)
-        // behind the client area. This would factor into (and spoil) compositing.
+        // GDI swaps the coordinates, so this is one pixel at (-1, -1), outside
+        // the client area, and the effect applies nowhere in it. A NULL or an
+        // empty region would apply it behind the entire client area, which on
+        // Windows 11 is a darkening layer that spoils the compositing (see 06).
         HRGN region = CreateRectRgn(0, 0, -1, -1);
         DWM_BLURBEHIND bb = {0};
         bb.dwFlags = DWM_BB_ENABLE | DWM_BB_BLURREGION;
@@ -73,6 +76,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
 
     SetDwmAlphaCompositing(hwnd, TRUE);
 
+    ShowCheckerboardBehind(hwnd);
     ShowWindow(hwnd, nCmdShow);
 
     MSG msg;

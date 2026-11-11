@@ -1,0 +1,3 @@
+Pixel format 10: 32 color bits, 8 alpha bits
+GL_RENDERER: NVIDIA GeForce RTX 3060 Ti/PCIe/SSE2
+GL_VERSION: 4.6.0 NVIDIA 610.47

@@ -7,6 +7,8 @@ This will not get you per-pixel transparency.
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
+#include "checkerboard.h"
+
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
         case WM_DESTROY:
@@ -57,6 +59,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE, LPSTR, int nCmdShow) {
     constexpr DWORD WHOLE_WINDOW_ALPHA = 128; // 0..255
     SetLayeredWindowAttributes(hwnd, RGB(0, 0, 0), WHOLE_WINDOW_ALPHA, LWA_ALPHA);
     
+    ShowCheckerboardBehind(hwnd);
     ShowWindow(hwnd, nCmdShow);
 
     MSG msg;

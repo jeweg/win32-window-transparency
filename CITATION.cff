@@ -1,5 +1,5 @@
 cff-version: 1.2.0
-title: "Windows Desktop Transparency — Reference Demos"
+title: "Win32 window transparency"
 message: "If you use this reference code, please cite it as below."
 type: software
 authors:
@@ -7,19 +7,25 @@ authors:
     given-names: Jens
 repository-code: "https://github.com/jeweg/win32-window-transparency"
 abstract: >-
-  Minimal, self-contained Win32/C++ demos that show how per-pixel window
-  transparency works on Windows 10/11 under DWM composition: BLACK_BRUSH +
-  DwmEnableBlurBehindWindow, layered windows, WS_EX_NOREDIRECTIONBITMAP, and
-  Vulkan swapchains using VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR.
+  How per-pixel window transparency works on Windows 10/11, with a small
+  Win32/C++ demo and a screenshot for each claim: the DWM opt-in with
+  DwmEnableBlurBehindWindow, what GDI writes into the alpha channel,
+  premultiplied alpha, DXGI swapchain models and DirectComposition, Vulkan
+  with VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR, OpenGL presented through
+  DXGI, and the GLFW transparent framebuffer bug.
 keywords:
   - win32
   - windows
   - dwm
   - transparency
   - per-pixel-alpha
+  - premultiplied-alpha
   - layered-window
-  - vulkan
   - directcomposition
+  - dxgi
+  - vulkan
+  - opengl
+  - glfw
   - cpp
   - reference
 license: MIT

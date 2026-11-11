@@ -1,0 +1,7 @@
+Captured 2026-11-11 11:50
+Microsoft Windows 11 Enterprise 25H2, build 26200.9711
+GPU: NVIDIA GeForce RTX 3060 Ti, driver 32.0.16.1047 (NVIDIA 610.47)
+System DPI: 96 (100%)
+Apps theme: dark, transparency effects: on
+Optimizations for windowed games: not set
+Screenshots: full run, 38 taken

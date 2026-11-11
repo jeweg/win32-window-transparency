@@ -1,0 +1,2 @@
+CreateSwapChainForComposition, premultiplied: 0x00000000
+CreateTargetForHwnd: 0x00000000
